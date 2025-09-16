@@ -12,7 +12,7 @@ public class Skynet {
         private final int MAX_CARRY = 5;
         private volatile boolean productionFinished = false;
 
-        public synchronized void produceParts(int day) {
+        public synchronized void produceParts() {
             Random rand = new Random();
             int count = rand.nextInt(MAX_DAILY_PRODUCTION) + 1;
             List<Part> newParts = new ArrayList<>();
@@ -126,7 +126,7 @@ public class Skynet {
 
         for (int day = 1; day <= 100; day++) {
             System.out.println("\n--- DAY " + day + " ---");
-            factoryStorage.produceParts(day);
+            factoryStorage.produceParts();
         }
 
         factoryStorage.finishProduction();
