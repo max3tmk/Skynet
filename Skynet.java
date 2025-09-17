@@ -1,4 +1,5 @@
 import java.util.*;
+import java.util.concurrent.Semaphore;
 
 public class Skynet {
 
@@ -10,9 +11,11 @@ public class Skynet {
         private final Queue<Part> parts = new LinkedList<>();
         private final int MAX_DAILY_PRODUCTION = 10;
         private final int MAX_CARRY = 5;
-        private volatile boolean productionFinished = false;
 
-        public synchronized void produceParts() {
+        private final Semaphore factionsTurn = new Semaphore(0);
+        private final Semaphore factoryTurn = new Semaphore(0);
+
+        public void produceAndPassTo(int night) {
             Random rand = new Random();
             int count = rand.nextInt(MAX_DAILY_PRODUCTION) + 1;
             List<Part> newParts = new ArrayList<>();
@@ -21,37 +24,41 @@ public class Skynet {
                 parts.add(part);
                 newParts.add(part);
             }
-            System.out.println("[DAY] Factory produced " + count + " parts: " + newParts +
+            System.out.println("Factory produced " + count + " parts: " + newParts +
                     " | Total in storage: " + parts.size());
-            notifyAll();
+
+            factionsTurn.release(2);
         }
 
-        public synchronized void finishProduction() {
-            productionFinished = true;
-            notifyAll();
-        }
-
-        public synchronized List<Part> takeParts(String factionName) {
-            while (parts.isEmpty() && !productionFinished) {
-                try {
-                    wait();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return new ArrayList<>();
-                }
-            }
-
-            if (parts.isEmpty()) {
+        public List<Part> takeParts(String factionName) {
+            try {
+                factionsTurn.acquire();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 return new ArrayList<>();
             }
 
             List<Part> taken = new ArrayList<>();
-            for (int i = 0; i < MAX_CARRY && !parts.isEmpty(); i++) {
-                taken.add(parts.poll());
+            synchronized (parts) {
+                for (int i = 0; i < MAX_CARRY && !parts.isEmpty(); i++) {
+                    taken.add(parts.poll());
+                }
             }
-            System.out.println("[NIGHT] " + factionName + " took: " + taken +
-                    " | Remaining in storage: " + parts.size());
+
+            System.out.println(factionName + " took: " + taken +
+                    " | Remaining: " + parts.size());
+
+            factoryTurn.release();
+
             return taken;
+        }
+
+        public void waitForFactions() {
+            try {
+                factoryTurn.acquire(2);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -83,8 +90,8 @@ public class Skynet {
                     buildRobot();
                 }
                 if (robotsBuilt > robotsBefore) {
-                    System.out.println("[NIGHT] " + name + " built " +
-                            (robotsBuilt - robotsBefore) + " new robots. Total: " + robotsBuilt);
+                    System.out.println(name + " built " +
+                            (robotsBuilt - robotsBefore) + " robots. Total: " + robotsBuilt);
                 }
             }
         }
@@ -112,32 +119,37 @@ public class Skynet {
             return name;
         }
     }
+
     public static void main(String[] args) throws InterruptedException {
-        PartStorage factoryStorage = new PartStorage();
+        PartStorage storage = new PartStorage();
 
-        Faction world = new Faction("World", factoryStorage);
-        Faction wednesday = new Faction("Wednesday", factoryStorage);
+        Faction world = new Faction("World", storage);
+        Faction wednesday = new Faction("Wednesday", storage);
 
-        Thread tWorld = new Thread(world);
-        Thread tWednesday = new Thread(wednesday);
+        Thread t1 = new Thread(world, "World");
+        Thread t2 = new Thread(wednesday, "Wednesday");
 
-        tWorld.start();
-        tWednesday.start();
+        t1.start();
+        t2.start();
 
-        for (int day = 1; day <= 100; day++) {
-            System.out.println("\n--- DAY " + day + " ---");
-            factoryStorage.produceParts();
+        for (int round = 1; round <= 100; round++) {
+            System.out.println("\n" + "=".repeat(50));
+            System.out.println("ROUND " + round + " — NIGHT STARTS");
+
+            storage.produceAndPassTo(round);
+
+            storage.waitForFactions();
+
+            System.out.println("ROUND " + round + " COMPLETED");
         }
 
-        factoryStorage.finishProduction();
+        t1.join();
+        t2.join();
 
-        tWorld.join();
-        tWednesday.join();
-
-        System.out.println("\n--- FINAL RESULTS AFTER 100 DAYS ---");
-        System.out.println(world.getName() + " built: " + world.getRobotsBuilt() + " robots");
-        System.out.println(wednesday.getName() + " built: " + wednesday.getRobotsBuilt() + " robots");
-        System.out.println();
+        System.out.println("\n" + "=".repeat(50));
+        System.out.println("FINAL RESULTS AFTER 100 ROUNDS");
+        System.out.println("World built: " + world.getRobotsBuilt() + " robots");
+        System.out.println("Wednesday built: " + wednesday.getRobotsBuilt() + " robots");
 
         if (world.getRobotsBuilt() > wednesday.getRobotsBuilt()) {
             System.out.println("WINNER: " + world.getName());
