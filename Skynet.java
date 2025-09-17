@@ -15,7 +15,7 @@ public class Skynet {
         private final Semaphore factionsTurn = new Semaphore(0);
         private final Semaphore factoryTurn = new Semaphore(0);
 
-        public void produceAndPassTo(int night) {
+        public void produceAndPassTo() {
             Random rand = new Random();
             int count = rand.nextInt(MAX_DAILY_PRODUCTION) + 1;
             List<Part> newParts = new ArrayList<>();
@@ -136,7 +136,7 @@ public class Skynet {
             System.out.println("\n" + "=".repeat(50));
             System.out.println("ROUND " + round + " — NIGHT STARTS");
 
-            storage.produceAndPassTo(round);
+            storage.produceAndPassTo();
 
             storage.waitForFactions();
 
